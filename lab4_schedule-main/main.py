@@ -18,7 +18,7 @@ Subject = namedtuple("Subject", "name")
 Group = namedtuple("Group", "name")
 Lesson = namedtuple("Lesson", "teacher subject group is_lecture per_week")
 Schedule = namedtuple("Schedule", "lessons classrooms times")
-DomainEl = namedtuple("DomainEl", "day time room")
+OptionEl = namedtuple("OptionEl", "day time room")
 
 
 # Прикладні дані для створення розкладу
@@ -144,57 +144,54 @@ lessons = [
     Lesson(teachers[17], subjects[17], groups[3:5], True, 1),
 ]
 
-def run_mrv():
-    return backtrack(mrv, init_domains(), Schedule([], [], []))
+def run_MinimumRemainingValues():
+    return backtrack(MinimumRemainingValues, init_options(), Schedule([], [], []))
 
 
-def run_lcv():
-    return backtrack(lcv, init_domains(), Schedule([], [], []))
+def run_LeastConstrainingValue():
+    return backtrack(LeastConstrainingValue, init_options(), Schedule([], [], []))
 
 
 def run_degree():
-    return backtrack(degree, init_domains(), Schedule([], [], []))
+    return backtrack(degree, init_options(), Schedule([], [], []))
 
-
-def run_forward_checking():
-    return backtrack(forward_checking, init_domains(), Schedule([], [], []))
 
 # Ініціалізує домени для кожного уроку
-def init_domains():
-    domain = {}
+def init_options():
+    options = {}
     buf = []
     buf_lecture = []
     # Створює доменні елементи для кожного дня, часового слоту та аудиторії
     for day in week_schedule.keys():
         for time_slot in time_schedule.keys():
             for room in classrooms:
-                buf.append(DomainEl(day, time_slot, room))
+                buf.append(OptionEl(day, time_slot, room))
                 if room.is_big:
-                    buf_lecture.append(DomainEl(day, time_slot, room))
+                    buf_lecture.append(OptionEl(day, time_slot, room))
     # Призначає домени для уроків
     for i in range(len(lessons)):
         if lessons[i].is_lecture:
-            domain[i] = copy(buf_lecture)
+            options[i] = copy(buf_lecture)
         else:
-            domain[i] = copy(buf)
-    return domain
+            options[i] = copy(buf)
+    return options
 
 # Minimum Remaining Values еврістика для вибору уроку
-def mrv(domain):
+def MinimumRemainingValues(options):
     min_len = len(week_schedule) * len(classrooms) * len(time_schedule) * 2
-    ind = list(domain.keys())[0]
-    for key, value in domain.items():
+    ind = list(options.keys())[0]
+    for key, value in options.items():
         if len(value) < min_len:
             min_len = len(value)
             ind = key
     return ind
 
 # Degree еврістика для вибору уроку
-def degree(domain):
+def degree(options):
     counts = {}
-    for key in domain:
+    for key in options:
         counts[key] = 0 if lessons[key].is_lecture else 1
-        for i in domain:
+        for i in options:
             if i == key:
                 continue
             if lessons[key].teacher == lessons[i].teacher:
@@ -212,24 +209,24 @@ def degree(domain):
     return ind
 
 # LCV еврістика для вибору уроку
-def lcv(domain):
+def LeastConstrainingValue(options):
     counts = {}
     # Підраховує кількість можливих варіантів для інших уроків
-    for i in domain:
+    for i in options:
         counts[i] = 0
-        for key in domain:
+        for key in options:
             if i == key:
                 continue
 
-            for d in domain[key]:
+            for d in options[key]:
                 if not (
-                    d.day == domain[i][0].day
-                    and d.time == domain[i][0].time
-                    and d.room == domain[i][0].room
+                        d.day == options[i][0].day
+                        and d.time == options[i][0].time
+                        and d.room == options[i][0].room
                 ) and not (
-                    d.day == domain[i][0].day
-                    and d.time == domain[i][0].time
-                    and (
+                        d.day == options[i][0].day
+                        and d.time == options[i][0].time
+                        and (
                         lessons[key].teacher == lessons[i].teacher
                         or set(map(str, lessons[key].group))
                         & set(map(str, lessons[i].group))
@@ -245,26 +242,23 @@ def lcv(domain):
             ind = key
     return ind
 
-# Forward Checking еврістика для вибору уроку
-def forward_checking(domain):
-    return list(domain.keys())[0]
 
 # Функція зворотного відстеження для пошуку рішення
-def backtrack(heuristic, domain, schedule):
-    if not domain:
+def backtrack(heuristic, options, schedule):
+    if not options:
         return schedule
-    ind = heuristic(domain)
+    ind = heuristic(options)
     if ind == -1:
         return None
-    for d in domain[ind]:
+    for d in options[ind]:
         sch_copy = copy(schedule)
         sch_copy.times.append(Time(d.day, d.time))
         sch_copy.classrooms.append(d.room)
         sch_copy.lessons.append(lessons[ind])
 
-        dom_copy = copy(domain)
+        dom_copy = copy(options)
         dom_copy.pop(ind)
-        dom_copy = update_domain(dom_copy, lessons[ind], d.day, d.time, d.room)
+        dom_copy = update_options(dom_copy, lessons[ind], d.day, d.time, d.room)
 
         res = backtrack(heuristic, dom_copy, sch_copy)
         if res:
@@ -273,10 +267,10 @@ def backtrack(heuristic, domain, schedule):
     return None
 
 # Оновлює домени після вибору уроку
-def update_domain(domain, lesson, day, time, room):
-    for key in domain:
+def update_options(options, lesson, day, time, room):
+    for key in options:
         buf = []
-        for d in domain[key]:
+        for d in options[key]:
             if not (d.day == day and d.time == time and d.room == room) and not ( # ОБМЕЖЕННЯ
                 d.day == day
                 and d.time == time
@@ -286,9 +280,9 @@ def update_domain(domain, lesson, day, time, room):
                 )
             ):
                 buf.append(d)
-        domain[key] = buf
+        options[key] = buf
 
-    return domain
+    return options
 
 # Функція для друку розкладу
 def print_schedule(solution: Schedule):
@@ -308,29 +302,38 @@ def print_schedule(solution: Schedule):
 # Основна функція
 def main():
     # Запуск алгоритму MRV та друк результату
-    solution = run_mrv()
+    solution = run_MinimumRemainingValues()
     print_schedule(solution)
+
+    print()
+    print("****************************************************************************************************")
+    print("****************************************************************************************************")
+
+    solution2 = run_LeastConstrainingValue()
+    print_schedule(solution2)
+
+    print()
+    print("****************************************************************************************************")
+    print("****************************************************************************************************")
+
+    solution3 = run_degree()
+    print_schedule(solution3)
 
     # Вимірювання часу виконання для MRV
     start_time = time()
-    run_mrv()
+    run_MinimumRemainingValues()
     print()
     print(f"MRV: {time() - start_time}")
 
     # Вимірювання часу виконання для LCV
     start_time = time()
-    run_lcv()
+    run_LeastConstrainingValue()
     print(f"LCV: {time() - start_time}")
 
     # Вимірювання часу виконання для Degree heuristic
     start_time = time()
     run_degree()
     print(f"Degree: {time() - start_time}")
-
-    # Вимірювання часу виконання для Forward checking
-    start_time = time()
-    run_forward_checking()
-    print(f"Forward checking: {time() - start_time}")
 
 # Запуск програми
 if __name__ == "__main__":
